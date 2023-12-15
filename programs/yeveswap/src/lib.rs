@@ -65,4 +65,51 @@ pub mod yeveswap {
             initial_sqrt_price,
         );
     }
+
+    /////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////
+    // initialize_tick_array function need to be added
+
+
+
+
+
+    /// Initializes a fee_tier account usable by Yevepools in a YevepoolConfig space.
+    ///
+    /// ### Authority
+    /// - "fee_authority" - Set authority in the YevepoolConfig
+    ///
+    /// ### Parameters
+    /// - `tick_spacing` - The tick-spacing that this fee-tier suggests the default_fee_rate for.
+    /// - `default_fee_rate` - The default fee rate that a pool will use if the pool uses this
+    ///                        fee tier during initialization.
+    ///
+    /// #### Special Errors
+    /// - `FeeRateMaxExceeded` - If the provided default_fee_rate exceeds MAX_FEE_RATE.
+    pub fn initialize_fee_tier(
+        ctx: Context<InitializeFeeTier>,
+        tick_spacing: u16,
+        default_fee_rate: u16,
+    ) -> Result<()> {
+        return instructions::initialize_fee_tier::handler(ctx, tick_spacing, default_fee_rate);
+    }
+
+    /// Initialize reward for a Yevepool. A pool can only support up to a set number of rewards.
+    ///
+    /// ### Authority
+    /// - "reward_authority" - assigned authority by the reward_super_authority for the specified
+    ///                        reward-index in this Yevepool
+    ///
+    /// ### Parameters
+    /// - `reward_index` - The reward index that we'd like to initialize. (0 <= index <= NUM_REWARDS)
+    ///
+    /// #### Special Errors
+    /// - `InvalidRewardIndex` - If the provided reward index doesn't match the lowest uninitialized
+    ///                          index in this pool, or exceeds NUM_REWARDS, or
+    ///                          all reward slots for this pool has been initialized.
+    pub fn initialize_reward(ctx: Context<InitializeReward>, reward_index: u8) -> Result<()> {
+        return instructions::initialize_reward::handler(ctx, reward_index);
+    }
+    
 }
