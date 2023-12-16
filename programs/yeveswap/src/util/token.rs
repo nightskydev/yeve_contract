@@ -262,7 +262,7 @@ pub fn mint_position_bundle_token_with_metadata_and_remove_authority<'info>(
     )?;
 
     // Create Metadata
-    // Orca Position Bundle xxxx...yyyy
+    // Yeve Position Bundle xxxx...yyyy
     // xxxx and yyyy are the first and last 4 chars of mint address
     let mint_address = position_bundle_mint.key().to_string();
     let mut nft_name = String::from(WPB_METADATA_NAME_PREFIX);
