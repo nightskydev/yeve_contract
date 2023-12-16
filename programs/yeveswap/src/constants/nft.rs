@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-pub mod whirlpool_nft_update_auth {
+pub mod yevepool_nft_update_auth {
     use super::*;
     declare_id!("3axbTs2z5GBy6usVbNVoqEgZMng3vZvMnAoX29BFfwhr");
 }

@@ -31,7 +31,7 @@ pub fn transfer_from_owner_to_vault<'info>(
 }
 
 pub fn transfer_from_vault_to_owner<'info>(
-    whirlpool: &Account<'info, Yevepool>,
+    yevepool: &Account<'info, Yevepool>,
     token_vault: &Account<'info, TokenAccount>,
     token_owner_account: &Account<'info, TokenAccount>,
     token_program: &Program<'info, Token>,
@@ -43,9 +43,9 @@ pub fn transfer_from_vault_to_owner<'info>(
             Transfer {
                 from: token_vault.to_account_info(),
                 to: token_owner_account.to_account_info(),
-                authority: whirlpool.to_account_info(),
+                authority: yevepool.to_account_info(),
             },
-            &[&whirlpool.seeds()],
+            &[&yevepool.seeds()],
         ),
         amount,
     )
@@ -99,22 +99,22 @@ pub fn burn_and_close_user_position_token<'info>(
 }
 
 pub fn mint_position_token_and_remove_authority<'info>(
-    whirlpool: &Account<'info, Yevepool>,
+    yevepool: &Account<'info, Yevepool>,
     position_mint: &Account<'info, Mint>,
     position_token_account: &Account<'info, TokenAccount>,
     token_program: &Program<'info, Token>,
 ) -> Result<()> {
     mint_position_token(
-        whirlpool,
+        yevepool,
         position_mint,
         position_token_account,
         token_program,
     )?;
-    remove_position_token_mint_authority(whirlpool, position_mint, token_program)
+    remove_position_token_mint_authority(yevepool, position_mint, token_program)
 }
 
 pub fn mint_position_token_with_metadata_and_remove_authority<'info>(
-    whirlpool: &Account<'info, Yevepool>,
+    yevepool: &Account<'info, Yevepool>,
     position_mint: &Account<'info, Mint>,
     position_token_account: &Account<'info, TokenAccount>,
     position_metadata_account: &UncheckedAccount<'info>,
@@ -126,13 +126,13 @@ pub fn mint_position_token_with_metadata_and_remove_authority<'info>(
     rent: &Sysvar<'info, Rent>,
 ) -> Result<()> {
     mint_position_token(
-        whirlpool,
+        yevepool,
         position_mint,
         position_token_account,
         token_program,
     )?;
 
-    let metadata_mint_auth_account = whirlpool;
+    let metadata_mint_auth_account = yevepool;
     invoke_signed(
         &create_metadata_accounts_v3(
             metadata_program.key(),
@@ -165,11 +165,11 @@ pub fn mint_position_token_with_metadata_and_remove_authority<'info>(
         &[&metadata_mint_auth_account.seeds()],
     )?;
 
-    remove_position_token_mint_authority(whirlpool, position_mint, token_program)
+    remove_position_token_mint_authority(yevepool, position_mint, token_program)
 }
 
 fn mint_position_token<'info>(
-    whirlpool: &Account<'info, Yevepool>,
+    yevepool: &Account<'info, Yevepool>,
     position_mint: &Account<'info, Mint>,
     position_token_account: &Account<'info, TokenAccount>,
     token_program: &Program<'info, Token>,
@@ -179,23 +179,23 @@ fn mint_position_token<'info>(
             token_program.key,
             position_mint.to_account_info().key,
             position_token_account.to_account_info().key,
-            whirlpool.to_account_info().key,
-            &[whirlpool.to_account_info().key],
+            yevepool.to_account_info().key,
+            &[yevepool.to_account_info().key],
             1,
         )?,
         &[
             position_mint.to_account_info(),
             position_token_account.to_account_info(),
-            whirlpool.to_account_info(),
+            yevepool.to_account_info(),
             token_program.to_account_info(),
         ],
-        &[&whirlpool.seeds()],
+        &[&yevepool.seeds()],
     )?;
     Ok(())
 }
 
 fn remove_position_token_mint_authority<'info>(
-    whirlpool: &Account<'info, Yevepool>,
+    yevepool: &Account<'info, Yevepool>,
     position_mint: &Account<'info, Mint>,
     token_program: &Program<'info, Token>,
 ) -> Result<()> {
@@ -205,15 +205,15 @@ fn remove_position_token_mint_authority<'info>(
             position_mint.to_account_info().key,
             Option::None,
             AuthorityType::MintTokens,
-            whirlpool.to_account_info().key,
-            &[whirlpool.to_account_info().key],
+            yevepool.to_account_info().key,
+            &[yevepool.to_account_info().key],
         )?,
         &[
             position_mint.to_account_info(),
-            whirlpool.to_account_info(),
+            yevepool.to_account_info(),
             token_program.to_account_info(),
         ],
-        &[&whirlpool.seeds()],
+        &[&yevepool.seeds()],
     )?;
     Ok(())
 }

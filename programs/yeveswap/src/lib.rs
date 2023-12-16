@@ -16,7 +16,7 @@ pub mod state;
 #[doc(hidden)]
 pub mod util;
 
-use crate::state::{OpenPositionBumps, YevepoolBumps};
+use crate::state::{OpenPositionBumps, OpenPositionWithMetadataBumps, YevepoolBumps};
 use instructions::*;
 
 #[program]
@@ -72,10 +72,21 @@ pub mod yeveswap {
         );
     }
 
-    /////////////////////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////
-    // initialize_tick_array function need to be added
+    /// Initializes a tick_array account to represent a tick-range in a Yevepool.
+    ///
+    /// ### Parameters
+    /// - `start_tick_index` - The starting tick index for this tick-array.
+    ///                        Has to be a multiple of TickArray size & the tick spacing of this pool.
+    ///
+    /// #### Special Errors
+    /// - `InvalidStartTick` - if the provided start tick is out of bounds or is not a multiple of
+    ///                        TICK_ARRAY_SIZE * tick spacing.
+    pub fn initialize_tick_array(
+        ctx: Context<InitializeTickArray>,
+        start_tick_index: i32,
+    ) -> Result<()> {
+        return instructions::initialize_tick_array::handler(ctx, start_tick_index);
+    }
 
     /// Initializes a fee_tier account usable by Yevepools in a YevepoolConfig space.
     ///
@@ -162,6 +173,59 @@ pub mod yeveswap {
             bumps,
             tick_lower_index,
             tick_upper_index,
+        );
+    }
+
+    /// Open a position in a Yevepool. A unique token will be minted to represent the position
+    /// in the users wallet. Additional Metaplex metadata is appended to identify the token.
+    /// The position will start off with 0 liquidity.
+    ///
+    /// ### Parameters
+    /// - `tick_lower_index` - The tick specifying the lower end of the position range.
+    /// - `tick_upper_index` - The tick specifying the upper end of the position range.
+    ///
+    /// #### Special Errors
+    /// - `InvalidTickIndex` - If a provided tick is out of bounds, out of order or not a multiple of
+    ///                        the tick-spacing in this pool.
+    pub fn open_position_with_metadata(
+        ctx: Context<OpenPositionWithMetadata>,
+        bumps: OpenPositionWithMetadataBumps,
+        tick_lower_index: i32,
+        tick_upper_index: i32,
+    ) -> Result<()> {
+        return instructions::open_position_with_metadata::handler(
+            ctx,
+            bumps,
+            tick_lower_index,
+            tick_upper_index,
+        );
+    }
+
+    /// Add liquidity to a position in the Yevepool. This call also updates the position's accrued fees and rewards.
+    ///
+    /// ### Authority
+    /// - `position_authority` - authority that owns the token corresponding to this desired position.
+    ///
+    /// ### Parameters
+    /// - `liquidity_amount` - The total amount of Liquidity the user is willing to deposit.
+    /// - `token_max_a` - The maximum amount of tokenA the user is willing to deposit.
+    /// - `token_max_b` - The maximum amount of tokenB the user is willing to deposit.
+    ///
+    /// #### Special Errors
+    /// - `LiquidityZero` - Provided liquidity amount is zero.
+    /// - `LiquidityTooHigh` - Provided liquidity exceeds u128::max.
+    /// - `TokenMaxExceeded` - The required token to perform this operation exceeds the user defined amount.
+    pub fn increase_liquidity(
+        ctx: Context<ModifyLiquidity>,
+        liquidity_amount: u128,
+        token_max_a: u64,
+        token_max_b: u64,
+    ) -> Result<()> {
+        return instructions::increase_liquidity::handler(
+            ctx,
+            liquidity_amount,
+            token_max_a,
+            token_max_b,
         );
     }
 }

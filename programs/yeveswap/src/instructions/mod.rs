@@ -4,10 +4,16 @@ pub mod initialize_pool;
 pub mod initialize_reward;
 pub mod set_reward_emissions;
 pub mod open_position;
+pub mod initialize_tick_array;
+pub mod open_position_with_metadata;
+pub mod increase_liquidity;
 
 pub use initialize_pool::*;
 pub use initialize_fee_tier::*;
 pub use initialize_reward::*;
 pub use set_reward_emissions::*;
 pub use open_position::*;
+pub use initialize_tick_array::*;
+pub use open_position_with_metadata::*;
+pub use increase_liquidity::*;
 pub use initialize_config::*;

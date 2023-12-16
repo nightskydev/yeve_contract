@@ -18,7 +18,7 @@ pub struct OpenPositionWithMetadataBumps {
 #[account]
 #[derive(Default)]
 pub struct Position {
-    pub whirlpool: Pubkey,     // 32
+    pub yevepool: Pubkey,     // 32
     pub position_mint: Pubkey, // 32
     pub liquidity: u128,       // 16
     pub tick_lower_index: i32, // 4
@@ -57,19 +57,19 @@ impl Position {
 
     pub fn open_position(
         &mut self,
-        whirlpool: &Account<Yevepool>,
+        yevepool: &Account<Yevepool>,
         position_mint: Pubkey,
         tick_lower_index: i32,
         tick_upper_index: i32,
     ) -> Result<()> {
-        if !Tick::check_is_usable_tick(tick_lower_index, whirlpool.tick_spacing)
-            || !Tick::check_is_usable_tick(tick_upper_index, whirlpool.tick_spacing)
+        if !Tick::check_is_usable_tick(tick_lower_index, yevepool.tick_spacing)
+            || !Tick::check_is_usable_tick(tick_upper_index, yevepool.tick_spacing)
             || tick_lower_index >= tick_upper_index
         {
             return Err(ErrorCode::InvalidTickIndex.into());
         }
 
-        self.whirlpool = whirlpool.key();
+        self.yevepool = yevepool.key();
         self.position_mint = position_mint;
 
         self.tick_lower_index = tick_lower_index;
@@ -118,7 +118,7 @@ mod is_position_empty_tests {
         reward_owed_2: u64,
     ) -> Position {
         Position {
-            whirlpool: test_program_id(),
+            yevepool: test_program_id(),
             position_mint: test_program_id(),
             liquidity,
             tick_lower_index: 0,
@@ -259,7 +259,7 @@ pub mod position_builder {
 
         pub fn build(self) -> Position {
             Position {
-                whirlpool: Pubkey::new_unique(),
+                yevepool: Pubkey::new_unique(),
                 position_mint: Pubkey::new_unique(),
                 liquidity: self.liquidity,
                 fee_growth_checkpoint_a: self.fee_growth_checkpoint_a,

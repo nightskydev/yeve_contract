@@ -16,8 +16,8 @@ cpi = ["no-entrypoint"]
 default = []
 
 [dependencies]
-anchor-lang = "0.28.0"
-anchor-spl = "0.28.0"
+anchor-lang = "0.26"
+anchor-spl = "0.26"
 spl-token = {version = "3.3", features = ["no-entrypoint"]}
 solana-program = "1.14.12"
 thiserror = "1.0"
