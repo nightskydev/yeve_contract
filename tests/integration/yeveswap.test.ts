@@ -1,0 +1,273 @@
+import * as anchor from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
+import { MathUtil, PDA } from "@orca-so/common-sdk";
+import BN from "bn.js";
+import { IDL } from "../../target/types/yeveswap";
+import Decimal from "decimal.js";
+import {
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  Connection,
+  Commitment,
+  SYSVAR_RENT_PUBKEY,
+} from "@solana/web3.js";
+import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
+
+import {
+  TOKEN_PROGRAM_ID,
+  createMint,
+  createAccount,
+  mintTo,
+  getAccount,
+  transfer,
+} from "@solana/spl-token";
+import * as assert from "assert";
+
+const PDA_YEVEPOOL_SEED = "yevepool";
+const PDA_POSITION_SEED = "position";
+const PDA_METADATA_SEED = "metadata";
+const PDA_TICK_ARRAY_SEED = "tick_array";
+const PDA_FEE_TIER_SEED = "fee_tier";
+const PDA_ORACLE_SEED = "oracle";
+const PDA_POSITION_BUNDLE_SEED = "position_bundle";
+const PDA_BUNDLED_POSITION_SEED = "bundled_position";
+
+const tokenMintAKey = new PublicKey(
+  "CU1f67B7n3XzwbHkFvciuH6Yqe8kiaEFfSZHzLNRvtYi"
+);
+const tokenMintBKey = new PublicKey(
+  "7vEpiNkomzeF2uDw8uuDFqEcQfaWbpPgmFf41G5Y7W4o"
+);
+
+export enum TickSpacing {
+  One = 1,
+  Stable = 8,
+  ThirtyTwo = 32,
+  SixtyFour = 64,
+  Standard = 128,
+}
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+const wallet = NodeWallet.local();
+
+export type InitConfigParams = {
+  yevepoolsConfigKeypair: Keypair;
+  feeAuthority: PublicKey;
+  collectProtocolFeesAuthority: PublicKey;
+  rewardEmissionsSuperAuthority: PublicKey;
+  defaultProtocolFeeRate: number;
+  funder: PublicKey;
+};
+
+export interface TestYevepoolsConfigKeypairs {
+  feeAuthorityKeypair: Keypair;
+  collectProtocolFeesAuthorityKeypair: Keypair;
+  rewardEmissionsSuperAuthorityKeypair: Keypair;
+}
+
+const configKeypairs: TestYevepoolsConfigKeypairs = {
+  feeAuthorityKeypair: Keypair.generate(),
+  collectProtocolFeesAuthorityKeypair: Keypair.generate(),
+  rewardEmissionsSuperAuthorityKeypair: Keypair.generate(),
+};
+
+const configInitInfo = {
+  yevepoolsConfigKeypair: Keypair.generate(),
+  feeAuthority: configKeypairs.feeAuthorityKeypair.publicKey,
+  collectProtocolFeesAuthority:
+    configKeypairs.collectProtocolFeesAuthorityKeypair.publicKey,
+  rewardEmissionsSuperAuthority:
+    configKeypairs.rewardEmissionsSuperAuthorityKeypair.publicKey,
+  defaultProtocolFeeRate: 300,
+  funder: wallet.publicKey,
+};
+
+const tokenVaultAKeypair = Keypair.generate();
+const tokenVaultBKeypair = Keypair.generate();
+
+let initializedConfigInfo: InitConfigParams;
+
+describe("yeveswap contract test", () => {
+  // Configure the client to use the local cluster.
+  // Use Mainnet-fork for testing
+  const commitment: Commitment = "confirmed";
+  const connection = new Connection(
+    "https://virulent-wandering-reel.solana-devnet.quiknode.pro/c29fc55807faf8297c2fed73d3cd98150fd970ad/",
+    {
+      commitment,
+      // wsEndpoint: "wss://api.devnet.solana.com/",
+    }
+  );
+
+  const options = anchor.AnchorProvider.defaultOptions();
+  const provider = new anchor.AnchorProvider(connection, wallet, options);
+
+  anchor.setProvider(provider);
+
+  const programId = new PublicKey(
+    "9AH3eYznKG1nxM1ZDFyn91N1KQnDc4GW9djDcah3tdi4"
+  );
+  const program = new anchor.Program(IDL, programId, provider);
+
+  it("Check balance", async () => {
+    let balance = await connection.getBalance(wallet.publicKey);
+    console.log(
+      `${wallet.publicKey.toString()} has ${balance / 1000000000} SOL`
+    );
+    // const fundingTx = new Transaction();
+    // fundingTx.add(
+    //   SystemProgram.transfer({
+    //     fromPubkey: wallet.publicKey,
+    //     toPubkey: configKeypairs.feeAuthorityKeypair.publicKey,
+    //     lamports: 100000000,
+    //   })
+    // );
+    // let txhash = await provider.sendAndConfirm(fundingTx);
+    // console.log(`txhash: ${txhash}`);
+  });
+
+  it("Initialize config!", async () => {
+    await program.methods
+      .initializeConfig(
+        configInitInfo.feeAuthority,
+        configInitInfo.collectProtocolFeesAuthority,
+        configInitInfo.rewardEmissionsSuperAuthority,
+        configInitInfo.defaultProtocolFeeRate
+      )
+      .accounts({
+        config: configInitInfo.yevepoolsConfigKeypair.publicKey,
+        funder: configInitInfo.funder,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([configInitInfo.yevepoolsConfigKeypair])
+      .rpc();
+    wait(6000);
+    const configAccount = await program.account.yevepoolsConfig.fetch(
+      configInitInfo.yevepoolsConfigKeypair.publicKey
+    );
+
+    assert.ok(
+      configAccount.collectProtocolFeesAuthority.equals(
+        configInitInfo.collectProtocolFeesAuthority
+      )
+    );
+    assert.ok(configAccount.feeAuthority.equals(configInitInfo.feeAuthority));
+
+    assert.ok(
+      configAccount.rewardEmissionsSuperAuthority.equals(
+        configInitInfo.rewardEmissionsSuperAuthority
+      )
+    );
+
+    assert.equal(
+      configAccount.defaultProtocolFeeRate,
+      configInitInfo.defaultProtocolFeeRate
+    );
+    initializedConfigInfo = configInitInfo;
+  });
+
+  it("fail on passing in already initialized yevepool account", async () => {
+    await assert.rejects(
+      program.methods
+        .initializeConfig(
+          initializedConfigInfo.feeAuthority,
+          initializedConfigInfo.collectProtocolFeesAuthority,
+          initializedConfigInfo.rewardEmissionsSuperAuthority,
+          initializedConfigInfo.defaultProtocolFeeRate
+        )
+        .accounts({
+          config: initializedConfigInfo.yevepoolsConfigKeypair.publicKey,
+          funder: initializedConfigInfo.funder,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([initializedConfigInfo.yevepoolsConfigKeypair])
+        .rpc(),
+      /0x0/
+    );
+  });
+
+  it("init fee tier", async () => {
+    const feeTierPda = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from(PDA_FEE_TIER_SEED),
+        configInitInfo.yevepoolsConfigKeypair.publicKey.toBuffer(),
+        new BN(TickSpacing.Stable).toArrayLike(Buffer, "le", 2),
+      ],
+      programId
+    );
+
+    await program.methods
+      .initializeFeeTier(TickSpacing.Stable, 800)
+      .accounts({
+        config: configInitInfo.yevepoolsConfigKeypair.publicKey,
+        feeTier: feeTierPda[0],
+        feeAuthority: configInitInfo.feeAuthority,
+        funder: configInitInfo.funder,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([configKeypairs.feeAuthorityKeypair])
+      .rpc();
+    wait(6000);
+    const feeTierAccount = await program.account.feeTier.fetch(feeTierPda[0]);
+
+    assert.ok(feeTierAccount.tickSpacing == TickSpacing.Stable);
+    assert.ok(feeTierAccount.defaultFeeRate == 800);
+  });
+
+  it("initialize pool", async () => {
+    const price = MathUtil.toX64(new Decimal(5));
+    const yevepoolPda = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from(PDA_YEVEPOOL_SEED),
+        configInitInfo.yevepoolsConfigKeypair.publicKey.toBuffer(),
+        tokenMintAKey.toBuffer(),
+        tokenMintBKey.toBuffer(),
+        new BN(TickSpacing.Stable).toArrayLike(Buffer, "le", 2),
+      ],
+      programId
+    );
+
+    const feeTierPda = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from(PDA_FEE_TIER_SEED),
+        configInitInfo.yevepoolsConfigKeypair.publicKey.toBuffer(),
+        new BN(TickSpacing.Stable).toArrayLike(Buffer, "le", 2),
+      ],
+      programId
+    );
+
+    const yevepoolBump = {
+      yevepoolBump: yevepoolPda[1],
+    };
+
+    await program.methods
+      .initializePool(yevepoolBump, TickSpacing.Stable, price)
+      .accounts({
+        yevepoolsConfig: configInitInfo.yevepoolsConfigKeypair.publicKey,
+        tokenMintA: tokenMintAKey,
+        tokenMintB: tokenMintBKey,
+        funder: configInitInfo.funder,
+        yevepool: yevepoolPda[0],
+        tokenVaultA: tokenVaultAKeypair.publicKey,
+        tokenVaultB: tokenVaultBKeypair.publicKey,
+        feeTier: feeTierPda[0],
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([wallet.payer, tokenVaultAKeypair, tokenVaultBKeypair])
+      .rpc();
+    wait(6000);
+    const feeTierAccount = await program.account.feeTier.fetch(feeTierPda[0]);
+
+    assert.ok(feeTierAccount.tickSpacing == TickSpacing.Stable);
+    assert.ok(feeTierAccount.defaultFeeRate == 800);
+  });
+});

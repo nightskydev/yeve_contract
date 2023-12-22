@@ -8,7 +8,7 @@ yeveswap = "3Vjbq7mGrLvSBb9v4n4TCeyS7DPFkx9kbqQNUfULgzrE"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "https://virulent-wandering-reel.solana-devnet.quiknode.pro/c29fc55807faf8297c2fed73d3cd98150fd970ad/"
 wallet = "/root/.config/solana/id.json"
 
 [scripts]
