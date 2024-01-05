@@ -35,10 +35,10 @@ const PDA_POSITION_BUNDLE_SEED = "position_bundle";
 const PDA_BUNDLED_POSITION_SEED = "bundled_position";
 
 const tokenMintAKey = new PublicKey(
-  "CU1f67B7n3XzwbHkFvciuH6Yqe8kiaEFfSZHzLNRvtYi"
+  "7vEpiNkomzeF2uDw8uuDFqEcQfaWbpPgmFf41G5Y7W4o"
 );
 const tokenMintBKey = new PublicKey(
-  "7vEpiNkomzeF2uDw8uuDFqEcQfaWbpPgmFf41G5Y7W4o"
+  "CU1f67B7n3XzwbHkFvciuH6Yqe8kiaEFfSZHzLNRvtYi"
 );
 
 export enum TickSpacing {
@@ -112,8 +112,8 @@ describe("yeveswap contract test", () => {
   anchor.setProvider(provider);
 
   const programId = new PublicKey(
-    "9AH3eYznKG1nxM1ZDFyn91N1KQnDc4GW9djDcah3tdi4"
-  );
+    "2QE2SSJJvLdFAUkCzKkmX3UmiKsFbJ9qn8mmufeokx6p" // contract address
+  ); // call this contract in this test script
   const program = new anchor.Program(IDL, programId, provider);
 
   it("Check balance", async () => {
@@ -134,6 +134,7 @@ describe("yeveswap contract test", () => {
   });
 
   it("Initialize config!", async () => {
+    // call init config function
     await program.methods
       .initializeConfig(
         configInitInfo.feeAuthority,
@@ -194,6 +195,7 @@ describe("yeveswap contract test", () => {
   });
 
   it("init fee tier", async () => {
+    // init fee tier function
     const feeTierPda = PublicKey.findProgramAddressSync(
       [
         Buffer.from(PDA_FEE_TIER_SEED),
@@ -247,6 +249,20 @@ describe("yeveswap contract test", () => {
       yevepoolBump: yevepoolPda[1],
     };
 
+    console.log({
+      yevepoolsConfig: configInitInfo.yevepoolsConfigKeypair.publicKey,
+      tokenMintA: tokenMintAKey,
+      tokenMintB: tokenMintBKey,
+      funder: configInitInfo.funder,
+      yevepool: yevepoolPda[0],
+      tokenVaultA: tokenVaultAKeypair.publicKey,
+      tokenVaultB: tokenVaultBKeypair.publicKey,
+      feeTier: feeTierPda[0],
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      rent: SYSVAR_RENT_PUBKEY,
+    });
+    // return;
     await program.methods
       .initializePool(yevepoolBump, TickSpacing.Stable, price)
       .accounts({

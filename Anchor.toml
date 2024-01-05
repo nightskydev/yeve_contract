@@ -2,14 +2,14 @@
 seeds = false
 skip-lint = false
 [programs.localnet]
-yeveswap = "3Vjbq7mGrLvSBb9v4n4TCeyS7DPFkx9kbqQNUfULgzrE"
+yeveswap = "2QE2SSJJvLdFAUkCzKkmX3UmiKsFbJ9qn8mmufeokx6p" 
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
 cluster = "https://virulent-wandering-reel.solana-devnet.quiknode.pro/c29fc55807faf8297c2fed73d3cd98150fd970ad/"
-wallet = "/root/.config/solana/id.json"
+wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
