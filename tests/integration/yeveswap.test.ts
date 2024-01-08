@@ -14,9 +14,9 @@ import {
   SYSVAR_RENT_PUBKEY,
 } from "@solana/web3.js";
 import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
-
 import {
   TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
   createMint,
   createAccount,
   mintTo,
@@ -35,6 +35,12 @@ const PDA_POSITION_BUNDLE_SEED = "position_bundle";
 const PDA_BUNDLED_POSITION_SEED = "bundled_position";
 
 const TICK_ARRAY_SIZE = 88;
+const tickLowerIndex = 0;
+const tickUpperIndex = 128;
+
+export const METADATA_PROGRAM_ADDRESS = new PublicKey(
+  "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
+);
 
 const tokenMintAKey = new PublicKey(
   "7vEpiNkomzeF2uDw8uuDFqEcQfaWbpPgmFf41G5Y7W4o"
@@ -44,6 +50,10 @@ const tokenMintBKey = new PublicKey(
 );
 const rewardMint = new PublicKey(
   "JC7EAyPpZKjt5bAQj7a3zpMRwsac5AxMoY5DHnPMffJr"
+);
+// admin wallet's account for rewardMint
+const adminRewardMintAccount = new PublicKey(
+  "FxBmrwYsMG9YjqsdZrKRZvqr4wNXHj8pA2WarsAM5dUC"
 );
 
 export enum TickSpacing {
@@ -99,6 +109,26 @@ const tokenVaultBKeypair = Keypair.generate();
 const rewardVaultKeypair = Keypair.generate();
 
 let initializedConfigInfo: InitConfigParams;
+
+export function getAssociatedTokenAddressSync(
+  mint: PublicKey,
+  owner: PublicKey,
+  allowOwnerOffCurve = false,
+  programId = TOKEN_PROGRAM_ID,
+  associatedTokenProgramId = ASSOCIATED_TOKEN_PROGRAM_ID
+): PublicKey {
+  if (!allowOwnerOffCurve && !PublicKey.isOnCurve(owner.toBuffer())) {
+    console.log("TOken owner offcurve");
+    return;
+  }
+
+  const [address] = PublicKey.findProgramAddressSync(
+    [owner.toBuffer(), programId.toBuffer(), mint.toBuffer()],
+    associatedTokenProgramId
+  );
+
+  return address;
+}
 
 describe("yeveswap contract test", () => {
   // Configure the client to use the local cluster.
@@ -365,7 +395,135 @@ describe("yeveswap contract test", () => {
       yevepoolPda[0]
     );
 
-    assert.ok(yevepoolAccount.rewardInfos[0].mint.toString() == rewardMint.toString());
-    assert.ok(yevepoolAccount.rewardInfos[0].vault.toString() == rewardVaultKeypair.publicKey.toString());
+    assert.ok(
+      yevepoolAccount.rewardInfos[0].mint.toString() == rewardMint.toString()
+    );
+    assert.ok(
+      yevepoolAccount.rewardInfos[0].vault.toString() ==
+        rewardVaultKeypair.publicKey.toString()
+    );
+  });
+
+  it("set_reward_emissions", async () => {
+    const emissionsPerSecondX64 = new anchor.BN(10_000)
+      .shln(16)
+      .div(new anchor.BN(60 * 60 * 24));
+    const rewardIndex = 0;
+
+    const yevepoolPda = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from(PDA_YEVEPOOL_SEED),
+        configInitInfo.yevepoolsConfigKeypair.publicKey.toBuffer(),
+        tokenMintAKey.toBuffer(),
+        tokenMintBKey.toBuffer(),
+        new BN(TickSpacing.Stable).toArrayLike(Buffer, "le", 2),
+      ],
+      programId
+    );
+
+    // send tokens to rewardVault
+    const rewardVaultTokenAccount = await createAccount(
+      connection,
+      wallet.payer,
+      rewardMint,
+      rewardVaultKeypair.publicKey
+    );
+
+    await transfer(
+      connection,
+      wallet.payer,
+      adminRewardMintAccount,
+      rewardVaultTokenAccount,
+      wallet.publicKey,
+      10000 * 1e9 // decimal 9
+    );
+    wait(6000);
+
+    await program.methods
+      .setRewardEmissions(rewardIndex, emissionsPerSecondX64) // rewardIndex = 0
+      .accounts({
+        rewardAuthority:
+          configKeypairs.rewardEmissionsSuperAuthorityKeypair.publicKey,
+        yevepool: yevepoolPda[0],
+        rewardVault: rewardVaultKeypair.publicKey,
+      })
+      .signers([configKeypairs.rewardEmissionsSuperAuthorityKeypair])
+      .rpc();
+    wait(6000);
+    const yevepoolAccount = await program.account.yevepool.fetch(
+      yevepoolPda[0]
+    );
+
+    console.log(yevepoolAccount);
+
+    assert.ok(
+      yevepoolAccount.rewardInfos[0].mint.toString() == rewardMint.toString()
+    );
+    assert.ok(
+      yevepoolAccount.rewardInfos[0].vault.toString() ==
+        rewardVaultKeypair.publicKey.toString()
+    );
+  });
+
+  it("open_position", async () => {
+    const positionMintKeypair = Keypair.generate();
+    const positionPda = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from(PDA_POSITION_SEED),
+        positionMintKeypair.publicKey.toBuffer(),
+      ],
+      programId
+    );
+    const metadataPda = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from(PDA_METADATA_SEED),
+        METADATA_PROGRAM_ADDRESS.toBuffer(),
+        positionMintKeypair.publicKey.toBuffer(),
+      ],
+      METADATA_PROGRAM_ADDRESS
+    );
+
+    const positionTokenAccountAddress = getAssociatedTokenAddressSync(
+      positionMintKeypair.publicKey,
+      wallet.publicKey
+    );
+
+    const yevepoolPda = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from(PDA_YEVEPOOL_SEED),
+        configInitInfo.yevepoolsConfigKeypair.publicKey.toBuffer(),
+        tokenMintAKey.toBuffer(),
+        tokenMintBKey.toBuffer(),
+        new BN(TickSpacing.Stable).toArrayLike(Buffer, "le", 2),
+      ],
+      programId
+    );
+
+    const bumps = {
+      positionBump: positionPda[1],
+    };
+
+    await program.methods
+      .openPosition(bumps, tickLowerIndex, tickUpperIndex) // rewardIndex = 0
+      .accounts({
+        funder: configInitInfo.funder,
+        owner: configInitInfo.funder,
+        position: positionPda[0],
+        positionMint: positionMintKeypair.publicKey,
+        positionTokenAccount: positionTokenAccountAddress,
+        yevepool: yevepoolPda[0],
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      })
+      .signers([positionMintKeypair])
+      .rpc();
+    wait(6000);
+    const positionAccount = await program.account.position.fetch(
+      positionPda[0]
+    );
+
+    console.log(positionAccount);
   });
 });
