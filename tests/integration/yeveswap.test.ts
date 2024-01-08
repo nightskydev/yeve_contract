@@ -34,11 +34,16 @@ const PDA_ORACLE_SEED = "oracle";
 const PDA_POSITION_BUNDLE_SEED = "position_bundle";
 const PDA_BUNDLED_POSITION_SEED = "bundled_position";
 
+const TICK_ARRAY_SIZE = 88;
+
 const tokenMintAKey = new PublicKey(
   "7vEpiNkomzeF2uDw8uuDFqEcQfaWbpPgmFf41G5Y7W4o"
 );
 const tokenMintBKey = new PublicKey(
   "CU1f67B7n3XzwbHkFvciuH6Yqe8kiaEFfSZHzLNRvtYi"
+);
+const rewardMint = new PublicKey(
+  "JC7EAyPpZKjt5bAQj7a3zpMRwsac5AxMoY5DHnPMffJr"
 );
 
 export enum TickSpacing {
@@ -91,6 +96,7 @@ const configInitInfo = {
 
 const tokenVaultAKeypair = Keypair.generate();
 const tokenVaultBKeypair = Keypair.generate();
+const rewardVaultKeypair = Keypair.generate();
 
 let initializedConfigInfo: InitConfigParams;
 
@@ -249,19 +255,6 @@ describe("yeveswap contract test", () => {
       yevepoolBump: yevepoolPda[1],
     };
 
-    console.log({
-      yevepoolsConfig: configInitInfo.yevepoolsConfigKeypair.publicKey,
-      tokenMintA: tokenMintAKey,
-      tokenMintB: tokenMintBKey,
-      funder: configInitInfo.funder,
-      yevepool: yevepoolPda[0],
-      tokenVaultA: tokenVaultAKeypair.publicKey,
-      tokenVaultB: tokenVaultBKeypair.publicKey,
-      feeTier: feeTierPda[0],
-      tokenProgram: TOKEN_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
-      rent: SYSVAR_RENT_PUBKEY,
-    });
     // return;
     await program.methods
       .initializePool(yevepoolBump, TickSpacing.Stable, price)
@@ -285,5 +278,94 @@ describe("yeveswap contract test", () => {
 
     assert.ok(feeTierAccount.tickSpacing == TickSpacing.Stable);
     assert.ok(feeTierAccount.defaultFeeRate == 800);
+
+    // const yevepoolAccount = await program.account.yevepool.fetch(
+    //   yevepoolPda[0]
+    // );
+    // console.log(yevepoolAccount);
+  });
+
+  it("initialize_tick_array", async () => {
+    const tickSpacing = TickSpacing.Standard;
+    const startTick = TICK_ARRAY_SIZE * tickSpacing * 2;
+
+    const yevepoolPda = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from(PDA_YEVEPOOL_SEED),
+        configInitInfo.yevepoolsConfigKeypair.publicKey.toBuffer(),
+        tokenMintAKey.toBuffer(),
+        tokenMintBKey.toBuffer(),
+        new BN(TickSpacing.Stable).toArrayLike(Buffer, "le", 2),
+      ],
+      programId
+    );
+
+    const tickArrayPda = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from(PDA_TICK_ARRAY_SEED),
+        yevepoolPda[0].toBuffer(),
+        Buffer.from(startTick.toString()),
+      ],
+      programId
+    );
+
+    await program.methods
+      .initializeTickArray(startTick)
+      .accounts({
+        yevepool: yevepoolPda[0],
+        tickArray: tickArrayPda[0],
+        funder: configInitInfo.funder,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([])
+      .rpc();
+    wait(6000);
+    const tickArrayAccount = await program.account.tickArray.fetch(
+      tickArrayPda[0]
+    );
+
+    assert.ok(tickArrayAccount.startTickIndex == startTick);
+    assert.ok(
+      tickArrayAccount.yevepool.toString() == yevepoolPda[0].toString()
+    );
+  });
+
+  it("initialize_reward", async () => {
+    const yevepoolPda = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from(PDA_YEVEPOOL_SEED),
+        configInitInfo.yevepoolsConfigKeypair.publicKey.toBuffer(),
+        tokenMintAKey.toBuffer(),
+        tokenMintBKey.toBuffer(),
+        new BN(TickSpacing.Stable).toArrayLike(Buffer, "le", 2),
+      ],
+      programId
+    );
+
+    await program.methods
+      .initializeReward(0) // rewardIndex = 0
+      .accounts({
+        rewardAuthority:
+          configKeypairs.rewardEmissionsSuperAuthorityKeypair.publicKey,
+        yevepool: yevepoolPda[0],
+        funder: configInitInfo.funder,
+        rewardMint,
+        rewardVault: rewardVaultKeypair.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([
+        rewardVaultKeypair,
+        configKeypairs.rewardEmissionsSuperAuthorityKeypair,
+      ])
+      .rpc();
+    wait(6000);
+    const yevepoolAccount = await program.account.yevepool.fetch(
+      yevepoolPda[0]
+    );
+
+    assert.ok(yevepoolAccount.rewardInfos[0].mint.toString() == rewardMint.toString());
+    assert.ok(yevepoolAccount.rewardInfos[0].vault.toString() == rewardVaultKeypair.publicKey.toString());
   });
 });
