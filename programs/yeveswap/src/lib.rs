@@ -4,9 +4,10 @@ use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 use solana_program::program::invoke_signed;
 use mpl_token_metadata::instruction::create_metadata_accounts_v3;
+use mpl_token_metadata::state::{Collection, Creator, Metadata};
 use spl_token::instruction::{mint_to, set_authority, AuthorityType};
 
-declare_id!("3RUyJvX49edEMMCxvQX6AHLxtAYLPm5rgEdyA8t8n27U");
+declare_id!("5kZULJfKLcHw9UbnTpPxmzWfnZk5ZRgsFDUiggjqdKzY");
 
 pub mod nft_update_auth {
     use super::*;
@@ -15,6 +16,7 @@ pub mod nft_update_auth {
 
 use nft_update_auth::ID as NFT_UPDATE_AUTH;
 const ADMIN_SEED: &[u8] = b"admin";
+const USER_SEED: &[u8] = b"user";
 
 #[program]
 mod balance_nft {
@@ -37,6 +39,14 @@ mod balance_nft {
         Ok(())
     }
 
+    pub fn add_to_whitelist(
+        ctx: Context<AddToWhitelist>,
+    ) -> Result<()> {
+        let user_info = &mut ctx.accounts.user_info;
+        user_info.is_whitelisted = true;
+        Ok(())
+    }
+
     pub fn update_presale_info(
         ctx: Context<UpdatePresaleInfo>,
         presale_start: i64,
@@ -55,12 +65,14 @@ mod balance_nft {
         state.nft_symbol = nft_symbol;
         state.nft_uri = nft_uri;
         state.total_minted = total_minted;
+        state.collection = ctx.accounts.collection.key();
+        state.genesis_collection = ctx.accounts.genesis_collection.key();
         Ok(())
     }
 
     pub fn mint(ctx: Context<MintNft>) -> Result<()> {
         let (_state_authority, state_authority_bump) =
-            Pubkey::find_program_address(&[ADMIN_SEED], ctx.program_id);
+        Pubkey::find_program_address(&[ADMIN_SEED], ctx.program_id);
         let _ = mint_nft(
             &ctx.accounts.state,
             &ctx.accounts.token_mint,
@@ -68,9 +80,27 @@ mod balance_nft {
             &ctx.accounts.token_program,
             state_authority_bump,
         );
-
+        
         let state = &mut ctx.accounts.state;
+        require!(state.total_minted < 20000, MintError::MaxSupplyReached);
+
+        let current_time = Clock::get()?.unix_timestamp;
+        let is_whitelisted = ctx.accounts.user_info.is_whitelisted;
+        require!(
+            (current_time > state.presale_start) && is_whitelisted || (current_time > state.presale_start + 3600), 
+            MintError::Unauthorized
+        );
+
         let metadata_mint_auth_account = &state;
+
+        let creators = vec![
+            Creator {
+                address: _state_authority.key(),
+                verified: false,
+                share: 100,
+            },
+        ];
+
         invoke_signed(
             &create_metadata_accounts_v3(
                 ctx.accounts.metadata_program.key(),
@@ -82,11 +112,11 @@ mod balance_nft {
                 state.nft_name.to_string(),
                 state.nft_symbol.to_string(),
                 state.nft_uri.to_string(),
-                None,
+                Some(creators),
                 0,
                 false,
                 true,
-                None,
+                Some(Collection{verified: false, key: state.collection}),
                 None,
                 None,
             ),
@@ -109,9 +139,18 @@ mod balance_nft {
             state_authority_bump,
         );
 
-        let current_time = Clock::get()?.unix_timestamp;
         let round_price = get_round_price(current_time, state.presale_start, state.total_minted)?;
         let mut final_price = round_price;
+
+        let mut genesis_nft_metadata_account = &ctx.accounts.genesis_nft_metadata_account;
+        let metadata: Metadata = Metadata::deserialize(&mut genesis_nft_metadata_account.data.try_borrow_mut().unwrap().as_ref())?;
+        
+        if let Some(collection) = metadata.collection {
+            if collection.key == state.genesis_collection {
+                final_price = (final_price as f64 * 0.9) as u64;
+            }
+        }
+
         let transfer_instruction = system_instruction::transfer(
             &ctx.accounts.signer.key(),
             &state.to_account_info().key(),
@@ -124,7 +163,8 @@ mod balance_nft {
                 state.to_account_info(),
             ],
         )?;
-        state.total_minted += 1;
+
+            state.total_minted += 1;
 
         Ok(())
     }
@@ -187,11 +227,26 @@ pub struct Initialize<'info> {
     #[account(
         init, 
         payer = signer, 
-        space = 8 + 1 + 8 + 8 + 32 + 128 + 128,
+        space = 8 + 1 + 8 + 8 + 8 + 32 + 32 + 128 + 128,
         seeds=[ADMIN_SEED],
         bump
     )]
     pub state: Account<'info, State>,
+    #[account(mut)]
+    pub signer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct AddToWhitelist<'info> {
+    #[account(
+        init_if_needed, 
+        payer = signer, 
+        space = 8 + 1,
+        seeds=[USER_SEED, signer.key().as_ref()],
+        bump
+    )]
+    pub user_info: Account<'info, UserInfo>,
     #[account(mut)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -205,6 +260,10 @@ pub struct UpdatePresaleInfo<'info> {
         bump
     )]
     pub state: Account<'info, State>,
+    /// CHECK: collection address
+    pub collection: UncheckedAccount<'info>,
+     /// CHECK: genesis collection address
+    pub genesis_collection: UncheckedAccount<'info>,
     pub signer: Signer<'info>,
 }
 
@@ -212,6 +271,14 @@ pub struct UpdatePresaleInfo<'info> {
 pub struct MintNft<'info> {
     #[account(mut)]
     pub state: Account<'info, State>,
+    #[account(
+        init_if_needed, 
+        payer = signer, 
+        space = 8 + 1,
+        seeds=[USER_SEED, signer.key().as_ref()],
+        bump
+    )]
+    pub user_info: Account<'info, UserInfo>,
     #[account(
         init,
         payer = signer,
@@ -236,6 +303,11 @@ pub struct MintNft<'info> {
     /// CHECK: checked via account constraints
     #[account(address = NFT_UPDATE_AUTH)]
     pub metadata_update_auth: UncheckedAccount<'info>,
+
+    /// CHECK: used to check genesis nft collection
+    #[account(mut)]
+    pub genesis_nft_metadata_account: AccountInfo<'info>, // used to check genesis nft ownership
+
     #[account(mut)]
     pub signer: Signer<'info>,
     pub token_program: Program<'info, Token>,
@@ -249,9 +321,16 @@ pub struct State {
     pub total_minted: u64,
     pub presale_start: i64,
     pub admin: Pubkey,
+    pub collection: Pubkey,
+    pub genesis_collection: Pubkey,
     pub nft_name: String,
     pub nft_symbol: String,
     pub nft_uri: String,
+}
+
+#[account]
+pub struct UserInfo {
+    pub is_whitelisted: bool,
 }
 
 #[error_code]
