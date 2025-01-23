@@ -7,11 +7,11 @@ use mpl_token_metadata::instruction::create_metadata_accounts_v3;
 use mpl_token_metadata::state::{Collection, Creator, Metadata};
 use spl_token::instruction::{mint_to, set_authority, AuthorityType};
 
-declare_id!("5kZULJfKLcHw9UbnTpPxmzWfnZk5ZRgsFDUiggjqdKzY");
+declare_id!("9Uv1i7d1qRkx3aeqWK1fLRxNd8tRhtHaWkkiw2D2PjJK");
 
 pub mod nft_update_auth {
     use super::*;
-    declare_id!("3axbTs2z5GBy6usVbNVoqEgZMng3vZvMnAoX29BFfwhr");
+    declare_id!("B4L4uRG8ocJfhSxby4UqEHgCTaNyjuUyDHuQCjeD4f4f");
 }
 
 use nft_update_auth::ID as NFT_UPDATE_AUTH;
@@ -20,7 +20,7 @@ const USER_SEED: &[u8] = b"user";
 
 #[program]
 mod balance_nft {
-    use mpl_token_metadata::assertions::metadata;
+    // use mpl_token_metadata::assertions::metadata;
 
     use super::*;
 
@@ -369,10 +369,10 @@ fn get_round_price(current_time: i64, presale_start: i64, total_minted: u64) -> 
     let _elapsed_time = current_time - presale_start;
 
     match total_minted {
-        0..=4999 => Ok(1_000_000_0),
-        5000..=9999 => Ok(1_500_000_0),
-        10000..=14999 => Ok(2_000_000_0),
-        15000..=19999 => Ok(2_500_000_0),
+        0..=4999 => Ok(1_000_000_000),
+        5000..=9999 => Ok(1_500_000_000),
+        10000..=14999 => Ok(2_000_000_000),
+        15000..=19999 => Ok(2_500_000_000),
         _ => Err(MintError::MaxSupplyReached.into()),
     }
 }
