@@ -20,6 +20,8 @@ const USER_SEED: &[u8] = b"user";
 
 #[program]
 mod balance_nft {
+    use mpl_token_metadata::assertions::metadata;
+
     use super::*;
 
     pub fn initialize(
@@ -142,13 +144,32 @@ mod balance_nft {
         let round_price = get_round_price(current_time, state.presale_start, state.total_minted)?;
         let mut final_price = round_price;
 
-        let mut genesis_nft_metadata_account = &ctx.accounts.genesis_nft_metadata_account;
+        let genesis_nft_metadata_account = &ctx.accounts.genesis_nft_metadata_account;
         let metadata: Metadata = Metadata::deserialize(&mut genesis_nft_metadata_account.data.try_borrow_mut().unwrap().as_ref())?;
+        let genesis_nft_token_account = &ctx.accounts.genesis_nft_token_account;
         
+        let mut is_correct_collection = false;
         if let Some(collection) = metadata.collection {
             if collection.key == state.genesis_collection {
-                final_price = (final_price as f64 * 0.9) as u64;
+                is_correct_collection = true;
             }
+        }
+
+        let mut is_correct_metadata = false;
+        if genesis_nft_token_account.mint == metadata.mint 
+        {
+            is_correct_metadata = true;
+        }
+
+        let mut is_correct_owner = false;
+        if genesis_nft_token_account.owner == ctx.accounts.signer.key()
+        {
+            is_correct_owner = true;
+        }
+
+        if is_correct_collection && is_correct_metadata && is_correct_owner
+        {
+                final_price = (final_price as f64 * 0.9) as u64;
         }
 
         let transfer_instruction = system_instruction::transfer(
@@ -307,6 +328,9 @@ pub struct MintNft<'info> {
     /// CHECK: used to check genesis nft collection
     #[account(mut)]
     pub genesis_nft_metadata_account: AccountInfo<'info>, // used to check genesis nft ownership
+    /// CHECK: used to check genesis nft toke account
+    #[account(mut)]
+    pub genesis_nft_token_account: Box<Account<'info, TokenAccount>>, // used to check genesis nft ownership
 
     #[account(mut)]
     pub signer: Signer<'info>,
